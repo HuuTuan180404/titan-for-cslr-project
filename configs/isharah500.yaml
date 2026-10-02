@@ -1,0 +1,264 @@
+# ------------------------------------------------------------
+# 1. PROJECT
+# ------------------------------------------------------------
+project:
+  name: continuous_sign_language_recognition
+  seed: 42
+
+
+training:
+  epochs: 100
+  resume: false
+  device: cuda
+
+  optimizer:
+    name: adamw
+    lr: 0.0001
+    weight_decay: 0.01
+
+  scheduler:
+    name: cosine
+    warmup_epochs: 5
+
+  gradient_clip:
+    enabled: true
+    max_norm: 5.0
+
+  mixed_precision:
+    enabled: true
+
+  accumulation_steps: 1
+
+
+# ------------------------------------------------------------
+# 2. DATASET
+# ------------------------------------------------------------
+dataset:
+  benchmark: isharah500
+  root: ./data/${dataset.benchmark}
+  metadata_root: ./metadata/${dataset.benchmark}
+
+  use_rgb: false
+
+  max_frames: 256
+
+  phase:
+    train: train
+    dev: dev
+    test: test
+
+# ------------------------------------------------------------
+# 3. POSE
+# ------------------------------------------------------------
+pose:
+  format: pkl
+  embed_dim: 768
+  num_heads: 12
+
+  left_hand:
+    num_joints: 21
+    channels: 2
+    embed_dim: 256
+    num_heads: 8
+
+  right_hand:
+    num_joints: 21
+    channels: 2
+    embed_dim: 256
+    num_heads: 8
+
+  face:
+    enabled: true
+    num_joints: 19
+    channels: 2
+    embed_dim: 128
+    num_heads: 4
+
+  body:
+    enabled: true
+    num_joints: 25
+    channels: 2
+    embed_dim: 128
+    num_heads: 4
+
+  transform: true
+  normalize: true
+  augmentation: true
+
+
+rgb:
+  image_size: 112
+  format: jpg
+  patch_size: 8
+  channels: 3
+  embed_dim: 128
+  num_heads: 8
+
+  left_hand:
+    enabled: ${dataset.use_rgb}
+
+  right_hand:
+    enabled: ${dataset.use_rgb}
+
+  transform: true
+  normalize: true
+  augmentation: true
+
+
+# ------------------------------------------------------------
+# 5. DATALOADER
+# ------------------------------------------------------------
+dataloader:
+  batch_size: 2
+  num_workers: 2
+
+  shuffle: true
+
+  pin_memory: true
+
+  persistent_workers: true
+
+
+# ------------------------------------------------------------
+# 7. MODEL
+# ------------------------------------------------------------
+model:
+  name: MyModel
+  use_rgb: ${dataset.use_rgb}
+
+  act: gelu
+  dropout: 0.1
+
+  pre_norm: true
+
+  pose_rgb_num_heads: 8
+  pose_pose_num_heads: 8
+  mlp_ratio: 2
+
+  fusion:
+    type: cross_attention
+
+  t_branch: # text_branch
+    vocab_size: 388
+    embed_dim: 256
+    depth: 3
+    num_heads: 8
+    proj_dim: 128
+    state_dim: 16
+    conv_kernel: 3
+    expand: 2
+    padding_idx: 0
+
+  p_branch: # pose_branch:
+    embed_dim: 256
+    d_state: 64 # mamba2
+    conv_kernel: 3
+    expand: 2
+    depth: 3
+    num_heads: 8
+    proj_dim: 128
+
+
+# ============================================================
+# Optimizer
+# ============================================================
+
+optimizer:
+  name: "adamw"
+
+  learning_rate: 0.0001
+
+  weight_decay: 0.0001
+
+  betas: [0.9, 0.999]
+
+  eps: 1.0e-8
+
+
+# ============================================================
+# Scheduler
+# ============================================================
+
+scheduler:
+  name: "cosine"
+  t_max: ${training.epochs}
+
+  eta_min: 1.0e-6
+
+  warmup_epochs: 5
+
+
+# ============================================================
+# Validation
+# ============================================================
+
+validation:
+  enabled: true
+
+  interval: 1
+
+  metric: "top1"
+
+  mode: "max"
+
+
+# ============================================================
+# Early Stopping
+# ============================================================
+
+early_stopping:
+  enabled: true
+
+  patience: 10
+
+  metric: "val_top1"
+
+  mode: "max"
+
+
+# ============================================================
+# Checkpoint
+# ============================================================
+
+checkpoint:
+  save_dir: "./checkpoints"
+
+  save_best: true
+
+  save_last: true
+
+  resume_path: "last_model.pth"
+
+  monitor: val_wer
+  mode: min
+
+
+# ============================================================
+# Logging
+# ============================================================
+
+logging:
+  log_dir: "./logs"
+
+  experiment_name: ${dataset.benchmark}
+
+  tensorboard: true
+
+  print_interval: 10
+
+
+plot:
+  enabled: true
+  save_dir: "./plots"
+
+loss:
+  type: ctc
+  lambda_contrastive: 0.6
+  lambda_ctc: 1.0
+
+  ctc:
+    blank: 0
+    zero_infinity: true
+  
+  contrastive:
+    temperature: 0.07
